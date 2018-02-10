@@ -2,7 +2,7 @@
 
 ### 待完善
 - 子集children集合按当前可用方向画图
-- `canUseDirection
+- **canUseDirection**
 
 
 
