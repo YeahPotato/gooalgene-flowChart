@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script src="https://cdn.bootcss.com/d3/4.12.1/d3.min.js"></script>
+	<style type="text/css">
+		body{
+			margin: 0;
+			padding: 0;
+		}
+		svg{
+			margin: 0 auto;
+			display: block;
+			border: 1px solid #386cca;
+		}
+		.shap{
+			cursor: pointer;
+		}
+		.shap:hover{
+			fill: #fff;
+		}
+	</style>	
+</head>
+<body>
+	<svg id="svg" width="1000" height="800" version="1.1" xmlns="http://www.w3.org/2000/svg">
+	</svg>
+</body>
+	<script type="text/javascript">
+		let data = [
+			{
+				name:"测序数据",
+				children:[]
+			},
+			{
+				name:"数据过滤",
+				children:['基因融合检测(人)']
+			},
+			{
+				name:"基因组对比",
+				children:['SNP和INDEL检测','差异剪接基因检测']
+			},
+			{
+				name:"新转录本预测",
+				children:[]
+			},
+			{
+				name:"基因定量分析",
+				children:["时间序列分析","主成分分析"]
+			},
+			{
+				name:"差异基因表达检测",
+				children:[
+					'转录因子预测',
+					'聚类分析',
+					'GO功能富集分析',
+					'Pathway功能富集分析',
+					'蛋白互做网络分析',
+					'植物抗病基因或真菌致病基因注释'
+				]
+			}
+		]
+
+		drawFlow(
+			{
+				data:data,             
+				shap:'rect',
+				shapWidth:100,
+				shapHeight:50,
+				shapClick:function(...args){
+					console.log(args);
+				},
+				startPadding:40,
+				textLength:6,
+				arrowOptions:{
+					direction:'bottom',
+					lineWidth:20,
+					arrowWidth:18
+				}
+			}
+		);
+
+		/*@data {Array}  流程图数据
+		* @shap {String}  形状 （暂时只支持矩形）
+		* @shapWidth {Number}   图形的宽度
+		* @shapHeight {Number}   图形的高度	
+		* @shapClick {Function}   图形点击的回调函数
+		* @startPadding {Number}   流程图距离SVG顶部的距离
+		* @textLength {Number}   超出截断
+		* @arrowOptions {Object}  箭头的配置
+		* @direction {String}   方向
+		* @lineWidth {Number}  箭头线的长度
+		* @arrowWidth {Number}   箭头的宽度
+		*/
+
+
+		function drawFlow(options){
+			let {data,shap,shapWidth,shapHeight,startPadding,arrowOptions,textLength,shapClick} = options;
+			if(!data.length) return;
+			var margin = 10;
+			let svg = d3.select('#svg');
+			let centerX = (svg.attr('width'))/2;
+			let startX = centerX-shapWidth/2;
+			let startY = margin+startPadding;
+
+			data.forEach(function(val,index){
+
+				drawRect({x:startX,y:startY,children:val.name,direction:"bottom",shapHeight,shapClick,shapWidth,textLength});
+
+				arrowOptions.x1 = startX+shapWidth/2;
+				arrowOptions.y1 = startY+shapHeight+margin;
+				arrowOptions.x2 = startX+shapWidth/2;
+				arrowOptions.y2 = arrowOptions.y1+arrowOptions.lineWidth;
+				
+
+				// draw arrows 
+				if(val.children.length<=2) {
+					arrowOptions.hasArrow = true;
+					drawArrow(arrowOptions);
+				}
+
+				let children = val.children;
+
+				if(children.length) drawChildren({
+					children:children,
+					x:startX,
+					y:startY,
+					lineWidth:arrowOptions.lineWidth,
+					arrowWidth:arrowOptions.arrowWidth,
+					direction:arrowOptions.direction,
+					margin,
+					shapWidth,
+					shapClick,
+					textLength,
+					shapHeight,
+					canUseDirection:['left','right']
+				});
+
+				startY = startY+margin*2+shapHeight+arrowOptions.lineWidth;
+					
+			})
+		}		
+
+		// draw arrow
+		function drawArrow(options){
+			// direction start end line-width
+			let {direction,x1,x2,y1,y2,lineWidth,arrowWidth,hasArrow} = options;
+			var arrowWrap = d3.select('#svg').append('g').attr('class','arrow')
+			var line = arrowWrap.append('line')
+				.attr('x1',x1)
+				.attr('y1',y1)
+				.attr('x2',x2)
+				.attr('y2',y2)
+				.style('stroke-width',2)
+				.style('stroke','#6589b1')
+
+			if(hasArrow){
+				let points1 = [x2,y2];
+				let points2 = [x2-arrowWidth/2,y2-arrowWidth/2];
+				let points3 =[x2+arrowWidth/2,y2-arrowWidth/2];
+				
+				let str = points1.join(',')+' '+points2.join(',')+' '+points3.join(',');
+				// console.log(str)
+				var polygon = arrowWrap.append('polygon')
+					.attr('points',str)
+					.style('fill','#6589b1')
+				if(arguments[1]){
+					polygon.attr('transform','rotate('+arguments[1]+','+points1[0]+' '+points1[1]+')')
+				}
+			}
+			
+			//default right
+			switch(direction){
+				case 'left':
+					arrowWrap.attr('transform','rotate(90,'+x1+' '+y1+')');
+					break;
+				case 'up':
+					arrowWrap.attr('transform','rotate(180,'+x1+' '+y1+')');
+				break;
+				case 'bottom':
+					arrowWrap.attr('transform','rotate(0,'+x1+' '+y1+')');
+				break;
+				case 'right':
+					arrowWrap.attr('transform','rotate(-90,'+x1+' '+y1+')');
+				break;
+				default:
+					arrowWrap.attr('transform','rotate(0)');
+				break;
+			}
+		}
+
+		function drawChildren(options){
+			let {children,x,y,lineWidth,textLength,shapClick,arrowWidth,direction,margin,shapWidth,shapHeight,canUseDirection} = options;
+
+			if(!children.length) return;
+
+			let svg = d3.select('#svg');
+			let arrowOptions = {x1:'',x2:'',y1:'',y2:'',direction,lineWidth,arrowWidth};
+			let tempX = x;
+			if(children.length===1){
+				// let num = Math.round(Math.random());
+				// if(num){
+					// draw left
+					arrowOptions.x1 = x-margin;
+					arrowOptions.x2 = arrowOptions.x1-lineWidth;
+					arrowOptions.y1 = y+shapHeight/2;
+					arrowOptions.y2 = arrowOptions.y1;
+					arrowOptions.hasArrow = true;
+
+					x = x-2*margin-arrowOptions.lineWidth-shapWidth;
+					drawArrow(arrowOptions,90);
+				// }else{
+					// draw right
+				// 	arrowOptions.x1 = x+margin+shapWidth;
+				// 	arrowOptions.x2 = arrowOptions.x1+lineWidth;
+				// 	arrowOptions.y1 = y+shapHeight/2;
+				// 	arrowOptions.y2 = arrowOptions.y1;
+				// 	arrowOptions.hasArrow = true;
+
+				// 	x = x+2*margin+arrowOptions.lineWidth+shapWidth;
+				// 	drawArrow(arrowOptions,-90);
+				// }
+				// draw rect
+				drawRect({x,y,shapHeight,textLength,shapClick,shapWidth,children:children[0],direction});
+			}else if(children.length==2){
+				// draw left
+				arrowOptions.x1 = x-margin;
+				arrowOptions.x2 = arrowOptions.x1-lineWidth;
+				arrowOptions.y1 = y+shapHeight/2;
+				arrowOptions.y2 = arrowOptions.y1;
+				arrowOptions.hasArrow = true;
+
+				x = x-2*margin-arrowOptions.lineWidth-shapWidth;
+				
+				drawArrow(arrowOptions,90);
+				drawRect({x,y,shapHeight,textLength,shapClick,shapWidth,children:children[0],direction});
+
+				// draw right
+				arrowOptions.x1 = tempX+margin+shapWidth;
+				arrowOptions.x2 = arrowOptions.x1+lineWidth;
+				arrowOptions.y1 = y+shapHeight/2;
+				arrowOptions.y2 = arrowOptions.y1;
+				arrowOptions.hasArrow = true;
+
+				x = x+2*(margin*2+arrowOptions.lineWidth+shapWidth);
+
+				drawArrow(arrowOptions,-90);
+				drawRect({x,y,shapHeight,shapClick,shapWidth,textLength,children:children[1],direction})
+			}else{
+				// 组合
+				if(children.length%2){
+					arrowOptions.x1 = arrowOptions.x2 = x+shapWidth/2;
+					arrowOptions.y1 = y+shapHeight+margin;
+					arrowOptions.y2 = y+shapHeight+margin+lineWidth;
+					arrowOptions.hasArrow = false;
+					arrowOptions.direction = "bottom";
+
+					x = arrowOptions.x1;
+					y = arrowOptions.y2;
+
+					// draw net lines
+					//{direction,x1,x2,y1,y2,lineWidth,arrowWidth,hasArrow}
+					drawArrow(arrowOptions);
+					// d3.select('#svg').append('circle').attr('cx',x).attr('cy',y).attr('fill','red').attr('r',10)
+
+					var offsetCount = (children.length-1)/2; 
+
+					var lineX1 = x-(shapWidth+margin*2)*offsetCount;
+					var lineY1 = y;
+					var lineX2 = x+(shapWidth+margin*2)*offsetCount;
+					var lineY2 = y;
+
+					drawArrow({direction:"",x1:lineX1,x2:lineX2,y1:y,y2:y,lineWidth:'',arrowWidth,hasArrow:false})
+					// d3.select('#svg').append('circle').attr('cx',lineX1).attr('cy',lineY1).attr('fill','red').attr('r',10)
+					// d3.select('#svg').append('circle').attr('cx',lineX2).attr('cy',lineY2).attr('fill','red').attr('r',10)
+				}else{
+					arrowOptions.x1 = arrowOptions.x2 = x+shapWidth/2;
+					arrowOptions.y1 = y+shapHeight+margin;
+					arrowOptions.y2 = y+shapHeight+margin+lineWidth;
+					arrowOptions.hasArrow = false;
+					arrowOptions.direction = "bottom";
+
+					x = arrowOptions.x1;
+					y = arrowOptions.y2;
+
+					// draw net lines
+					//{direction,x1,x2,y1,y2,lineWidth,arrowWidth,hasArrow}
+					drawArrow(arrowOptions);
+
+					var offsetCount = children.length/2; 
+
+					var lineX1 = x-(shapWidth+margin*2)*(offsetCount-1)-shapWidth/2-margin;
+					var lineY1 = y;
+					var lineX2 = x+(shapWidth+margin*2)*(offsetCount-1)+shapWidth/2+margin;
+					var lineY2 = y;
+
+					drawArrow({direction:"",x1:lineX1,x2:lineX2,y1:y,y2:y,lineWidth:'',arrowWidth,hasArrow:false})
+				}
+				// 画箭头 矩形 下面的连接线
+				children.forEach((val,index)=>{
+					let arrowGroupStartX1 = lineX1+(margin*2+shapWidth)*index;
+					let arrowGroupStartY1 = lineY1;
+					let arrowGroupStartX2 = arrowGroupStartX1;
+					let arrowGroupStartY2 = lineY1+lineWidth
+					drawArrow({direction:"bottom",x1:arrowGroupStartX1,x2:arrowGroupStartX2,y1:arrowGroupStartY1,y2:arrowGroupStartY2,lineWidth:'',arrowWidth,hasArrow:true});
+					var y = arrowGroupStartY2+margin;
+					drawRect({x:arrowGroupStartX1-shapWidth/2,y,textLength,shapClick,shapHeight,shapWidth,children:val,direction:"bottom"})
+				})
+
+			}
+		}
+
+
+		/*
+		* 画单个矩形
+		* x:矩形x 
+		* y:矩形y 
+		* children: 当前的矩形数据
+		* direction: 矩形相对于父级的方向
+		*/
+		function drawRect({x,y,shapHeight,shapWidth,shapClick,children,direction,textLength}){
+			var item = d3.select("#svg").append('g')
+					.attr('class','shap')
+					.attr('transform','translate('+(x+shapWidth/2)+' '+(y+shapHeight/2)+')');
+
+				item.append('rect')
+					.attr('x',-shapWidth/2)
+					.attr('y',-shapHeight/2)
+					.attr('rx',10)
+					.attr('ry',10)
+					.attr('width',shapWidth)
+					.attr('height',shapHeight)
+					.style('fill','#b7d1d7')
+					// .style('stroke','#ccc')
+					.on('click',function(){
+						shapClick(children)
+					});
+					// .style('stroke-width',2);
+				var ts = item.append('text')
+					.style('font-size','14px')
+					.on('click',function(){
+						shapClick(children)
+					});
+
+
+					let textNum = Math.ceil(children.length/textLength);
+					let baseNum;
+					switch(textNum){
+						case 1:
+							baseNum = 0;
+								break;
+						case 2:
+							baseNum = -6;
+								break;
+						case 3:
+							baseNum = -14;
+								break;
+						default:
+							baseNum = -6-8*(textNum-2);
+
+					}
+					for(let i=0;i<textNum;i++){
+						let text = children.substring(i*textLength,(i+1)*textLength);
+
+						ts.append('tspan')
+						.text(text)
+						.attr('x',0)
+						.attr('y',16*i+baseNum)
+						.style('text-anchor','middle')
+						.style('dominant-baseline','middle');
+					}
+				
+		}
+	</script>
+</html>
